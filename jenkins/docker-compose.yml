@@ -1,0 +1,41 @@
+services:
+  jenkins-controller:
+    image: designoop-jenkins
+    restart: unless-stopped
+    build:
+      context: .
+    container_name: jenkins-controller
+    environment:
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # - ./casc_configs/jenkins.yaml:/var/jenkins_home/jenkins.yaml
+      # - ./casc_configs:/var/jenkins_home/casc_configs
+    ports:
+      - "8700:8080"
+      - "50000:50000"
+    env_file:
+      - ./jenkins.env
+      - ./ssh-keys.env
+    secrets:
+     - agent_ssh_key
+     - vps_ssh_key
+
+  agent:
+   image: jenkins/ssh-agent:latest
+  #  ports:
+  #    - 8050:22
+   expose:
+     - 22
+   env_file:
+     - ./ssh-keys.env
+
+secrets:
+  agent_ssh_key:
+    file: ./secrets/agent_ssh_key.txt
+  vps_ssh_key:
+    file: ./secrets/vps_ssh_key
+
+volumes:
+  jenkins_home: {}

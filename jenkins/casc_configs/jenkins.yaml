@@ -1,0 +1,88 @@
+# https://www.amapac.io/blog/2023/vds_jenkins_with_docker_desktop_jcasc.html
+# https://github.com/Creatiwww/jenkins-jcasc/blob/main/controller/casc.yaml
+
+jenkins:
+  authorizationStrategy:
+    projectMatrix:
+      entries:
+        - group:
+            name: admin
+            permissions:
+              - Overall/Administer
+        - user:
+            name: "${ADMIN_USERNAME}"
+            permissions:
+              - Overall/Administer
+  numExecutors: 0
+  systemMessage: "${SYSTEM_MESSAGE}"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${ADMIN_USERNAME}"
+          password: "${ADMIN_PASSWORD}"
+
+
+#  jobs should be ran using the same Jenkins user that configured or triggered it.
+  nodes:
+    - permanent:
+        labelString: "docker"
+        mode: NORMAL
+        name: "agent-1"
+        remoteFS: "/home/jenkins"
+        # remoteFS: "/var/lib/jenkins"
+        launcher:
+          SSH:
+            sshHostKeyVerificationStrategy:
+              manuallyTrustedKeyVerificationStrategy:
+                requireInitialManualTrust: false
+            host: agent
+            port: 22
+            credentialsId: agent_ssh_key
+            launchTimeoutSeconds: 60
+            maxNumRetries: 3
+            retryWaitTime: 30
+# security:
+#   queueItemAuthenticator:
+#     authenticators:
+#     - global:
+#         strategy: triggeringUsersAuthorizationStrategy
+
+
+unclassified:
+  location:
+    url: "${JENKINS_URL}"
+    adminAddress: "${JENKINS_EMAIL_ADDRESS}"
+
+tool:
+  maven:
+    installations:
+      - name: "Maven 3.9.8"
+        properties:
+          - installSource:
+              installers:
+                - maven:
+                    id: "3.9.8"
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: vps_ssh_key
+              username: root
+              passphrase: "${VPS_SSH_PASSPHRASE}"
+              description: "SSH private key file for connecting to deployment server"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/vps_ssh_key}"
+          - basicSSHUserPrivateKey:
+              scope: SYSTEM
+              id: agent_ssh_key
+              username: jenkins
+              passphrase: "${AGENT_SSH_PASSPHRASE}"
+              description: "SSH private key file for agent node"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/agent_ssh_key}"

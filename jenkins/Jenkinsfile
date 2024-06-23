@@ -1,0 +1,82 @@
+pipeline {
+    agent any
+
+    environment {
+        PATH = "${tool 'Maven 3.9.8'}/bin:${env.PATH}"
+    }
+
+    tools {
+        maven 'Maven 3.9.8'
+    }
+
+    stages {
+        stage('Checkout DesignOOP GitHub Repository') {
+            steps {
+                // Checkout the repository from GitHub
+                git url: 'https://github.com/DragosGhinea/DesignOOP.git', branch: 'main'
+            }
+        }
+
+        stage('Build Backend (Maven)') {
+            steps {
+                // Navigate to backend directory
+                dir('backend') {
+                    // Run Maven build
+                    sh 'mvn clean package -Pprod -DskipTests'
+                }
+            }
+        }
+
+        stage('Cleanup Previous Deployment on Remote Server') {
+            steps {
+                script {
+                    sshagent(credentials: ['vps_ssh_key']) {
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'rm -rf ~/deployments/DesignOOP'"
+                    }
+                }
+            }
+        }
+
+        stage('Create Directories on Remote Server') {
+            steps {
+                script {
+                    sshagent(credentials: ['vps_ssh_key']) {
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'mkdir -p ~/deployments/DesignOOP/backend/courses-module/target'"
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'mkdir -p ~/deployments/DesignOOP/backend/users-module/target'"
+                    }
+                }
+            }
+        }
+
+        stage('Copy Files to Remote Server') {
+            steps {
+                script {
+                    sshagent(credentials: ['vps_ssh_key']) {
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'cp -r ~/prod-env ~/deployments/DesignOOP/prod-env'"
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/nginx ${SSH_HOST}:~/deployments/DesignOOP/nginx"
+
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/frontend ${SSH_HOST}:~/deployments/DesignOOP/frontend"
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'cp ~/prod-env/frontend.env ~/deployments/DesignOOP/frontend/.env.local'"
+
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/backend/courses-module/Dockerfile ${SSH_HOST}:~/deployments/DesignOOP/backend/courses-module/Dockerfile"
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/backend/courses-module/target/courses-module.jar ${SSH_HOST}:~/deployments/DesignOOP/backend/courses-module/target/courses-module.jar"
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/backend/users-module/Dockerfile ${SSH_HOST}:~/deployments/DesignOOP/backend/users-module/Dockerfile"
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/backend/users-module/target/users-module.jar ${SSH_HOST}:~/deployments/DesignOOP/backend/users-module/target/users-module.jar"
+                        sh "scp -o StrictHostKeyChecking=no -r ${WORKSPACE}/docker-compose-prod.yml ${SSH_HOST}:~/deployments/DesignOOP/docker-compose-prod.yml"
+                    }
+                }
+            }
+        }
+
+        stage('Run Docker Compose') {
+            steps {
+                script {
+                    sshagent(credentials: ['vps_ssh_key']) {
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'cd ~/deployments/DesignOOP && docker compose -f docker-compose-prod.yml down'"
+                        sh "ssh -o StrictHostKeyChecking=no ${SSH_HOST} 'cd ~/deployments/DesignOOP && docker compose -f docker-compose-prod.yml up -d --build'"
+                    }
+                }
+            }
+        }
+    }
+}
